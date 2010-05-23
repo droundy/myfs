@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"bitbucket.org/taruti/go-extra/fuse"
 )
 
@@ -57,6 +58,9 @@ func newDirAttr(ino uint64) *fuse.Attr {
 	a.Mode = fuse.S_IFDIR + 0755
 	a.Uid = 1137
 	a.Gid = 1137
+	sec, nsec, _ := os.Time()
+	a.Mtime = uint64(sec) - 3600
+	a.Mtimensec = uint32(nsec)
 	return a
 }
 
@@ -68,7 +72,9 @@ func newFileAttr(ino uint64) *fuse.Attr {
 	a.Nlink = 1
 	a.Uid = 1137
 	a.Gid = 1137
-	a.Mtime = 100000000
+	sec, nsec, _ := os.Time()
+	a.Mtime = uint64(sec)
+	a.Mtimensec = uint32(nsec)
 	return a
 }
 
