@@ -17,7 +17,7 @@ func main() {
 	}
 	defer UnmountFuse(mountpoint)
 	go func() {
-		err = fuse.FuseLoop(&MyFS{}, fuseFd)
+		err = fuse.FuseLoop(NewFS(), fuseFd)
 		fmt.Printf("err = %v\n", err) 
 	}()
 	for {

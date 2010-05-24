@@ -4,14 +4,14 @@
 all: myfs
 
 clean:
-	rm -f */*.$(O) */*/*.$(O) */*/*/*.$(O) bin/*
+	rm -f */*.$(O) */*/*.$(O) */*/*/*.$(O) bin/* myfs
 
 include $(GOROOT)/src/Make.$(GOARCH)
 
 .PHONY: clean
 .SUFFIXES: .$(O) .go
 
-main.$(O): myfs.go main.go
+main.$(O): main.go sillyfiles.go
 	$(GC) -o $@ $^
 
 myfs: main.$(O)
