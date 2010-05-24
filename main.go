@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	mountpoint := "/tmp/m"
+	mountpoint := os.Args[1]
 	fuseFd,err := fuse.MountFuse(mountpoint, []string{})
   fmt.Printf("f = %v, err = %v\n", fuseFd, err) 
 	if err != nil {

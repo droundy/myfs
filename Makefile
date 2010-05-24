@@ -16,3 +16,6 @@ main.$(O): main.go sillyfiles.go
 
 myfs: main.$(O)
 	$(LD) -o $@ $<
+
+check: all
+	./test.sh
