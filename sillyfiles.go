@@ -122,7 +122,6 @@ func (fs *FileSystem) FuseOpen(o *fuse.Open) (flags fuse.Flags, fh fuse.FuseFile
 	fs.Log("FuseOpen", o)
 	flags =  o.Flags
 	if i,ok := fs.nodes[o.Nodeid]; ok {
-		i.Location = 0
 		return flags, i, fuse.OK
 	}
 	return 0, nil, fuse.ENOENT
@@ -161,7 +160,6 @@ func (fs *FileSystem) NilFile() fuse.FuseFile {
 
 type Inode struct {
 	Ino uint64
-	Location uint64
 	Atime, Mtime, Ctime uint64
 	Atimensec, Mtimensec, Ctimensec uint32
 	Mode uint32
@@ -182,21 +180,21 @@ func (i *Inode) IsDir() bool {
 
 func (i *Inode) FuseRead(io *fuse.Io) ([]byte, fuse.Error) {
 	i.Log("FuseRead", io) // the following is wrong...
-	i.Log("location is", i.Location)
+	i.Log("offset is", io.Offset)
+	i.Log("size is", io.Size)
 	if i.IsDir() {
 		de := new(fuse.DEntryList)
 		var num uint64 = 0
 		for path,ino := range i.DirContents {
 			i.Log("::: ",path,ino)
-			if num == i.Location {
+			if num >= io.Offset {
 				de.AddString(path, ino, fuse.S_IFDIR)
 				num += 1
-				i.Location += 1
 			}
 		}
 		return de.Bytes(), fuse.OK
 	}
-	return []byte(i.FileContents), fuse.OK
+	return []byte(i.FileContents[io.Offset:]), fuse.OK
 }
 
 func (i *Inode) FuseWrite(io *fuse.Io, d []byte) (uint64, fuse.Error) {
@@ -209,7 +207,9 @@ func (i *Inode) FuseRelease(r *fuse.Release) fuse.Error {
 	i.Log("FuseRelease", r)
 	if i.Nreading > 0 { i.Nreading -= 1 }
 	if i.Nwriting > 0 { i.Nwriting -= 1 }
-	i.Log("File contents:", i.FileContents)
+	if !i.IsDir() {
+		i.Log("File contents:", i.FileContents)
+	}
 	return fuse.OK
 }
 
