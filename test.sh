@@ -30,6 +30,7 @@ rm boo/foo
 rmdir boo
 ls -l boo && exit 1
 echo hello > bar
+cat bar
 grep hello bar
 # the size is 6
 ls -l bar | grep ' 6 '

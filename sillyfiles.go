@@ -65,7 +65,7 @@ func (fs *FileSystem) Create(parent uint64, name string) *Inode {
 	a.Mtimensec = uint32(nsec)
 	a.Ctime = uint64(sec) - 3600
 	a.Ctimensec = uint32(nsec)
-	a.FileContents = ""
+	a.FileContents = make([]byte, 0, 256)
 	fs.nodes[a.Ino] = a;
 	fs.nodes[parent].DirContents[name] = a.Ino
 	return a
@@ -193,7 +193,7 @@ type Inode struct {
 	Nlink uint32
 	Uid, Gid uint32
 	Nreading, Nwriting uint32
-	FileContents string
+	FileContents []byte
 	DirContents map[string]uint64
 }
 
@@ -221,12 +221,27 @@ func (i *Inode) FuseRead(io *fuse.Io) ([]byte, fuse.Error) {
 		}
 		return de.Bytes(), fuse.OK
 	}
-	return []byte(i.FileContents[io.Offset:]), fuse.OK
+	return i.FileContents[io.Offset:], fuse.OK
 }
 
-func (i *Inode) FuseWrite(io *fuse.Io, d []byte) (uint64, fuse.Error) {
-	i.Log("FuseWrite", io, string(d))
-	i.FileContents = string(d) // wrong!
+func (ino *Inode) FuseWrite(io *fuse.Io, d []byte) (uint64, fuse.Error) {
+	ino.Log("FuseWrite", io, string(d))
+	ino.Log("io.Offset is ", int(io.Offset))
+	stop := int(io.Offset) + len(d)
+	if cap(ino.FileContents) < stop {
+		ino.Log("Expanding FileContents...")
+		fc := make([]byte, stop, 2*stop)
+		for i,v := range ino.FileContents {
+			fc[i] = v
+		}
+		ino.FileContents = fc
+	} else {
+		ino.FileContents = ino.FileContents[0:stop]
+	}
+	for i,v := range d {
+		ino.FileContents[int(io.Offset) + i] = v
+	}
+	ino.Log("FileContents is now: ", string(ino.FileContents))
 	return uint64(len(d)), fuse.OK
 }
 
@@ -235,7 +250,7 @@ func (i *Inode) FuseRelease(r *fuse.Release) fuse.Error {
 	if i.Nreading > 0 { i.Nreading -= 1 }
 	if i.Nwriting > 0 { i.Nwriting -= 1 }
 	if !i.IsDir() {
-		i.Log("File contents:", i.FileContents)
+		i.Log("File contents:", string(i.FileContents))
 	}
 	return fuse.OK
 }

@@ -8,6 +8,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Printf("Need a mountpoint as an argument!\n")
+		os.Exit(1)
+	}
 	mountpoint := os.Args[1]
 	fuseFd,err := fuse.MountFuse(mountpoint, []string{})
   fmt.Printf("f = %v, err = %v\n", fuseFd, err) 
