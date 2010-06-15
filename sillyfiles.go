@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"syscall"
 	"bitbucket.org/taruti/go-extra/fuse"
 )
 
@@ -30,6 +31,7 @@ func (fs *FileSystem) MkDir(parent uint64, name string) *Inode {
 	a.Mode = fuse.S_IFDIR + 0755
 	a.Uid = 1137
 	a.Gid = 1137
+	a.Nlink = 1
 	sec, nsec, _ := os.Time()
 	a.Mtime = uint64(sec) - 3600
 	a.Mtimensec = uint32(nsec)
@@ -57,6 +59,7 @@ func (fs *FileSystem) Create(parent uint64, name string) *Inode {
 	a.Mode = fuse.S_IFREG + 0644
 	a.Uid = 1137
 	a.Gid = 1137
+	a.Nlink = 1
 	sec, nsec, _ := os.Time()
 	a.Mtime = uint64(sec) - 3600
 	a.Mtimensec = uint32(nsec)
@@ -66,6 +69,25 @@ func (fs *FileSystem) Create(parent uint64, name string) *Inode {
 	fs.nodes[a.Ino] = a;
 	fs.nodes[parent].DirContents[name] = a.Ino
 	return a
+}
+
+func (fs *FileSystem) Delete(parent uint64, name string) fuse.Error {
+	if _,ok := fs.nodes[parent]; !ok {
+		panic("yikes, the parent doesn't exist!")
+	}
+	if ino, ok := fs.nodes[parent].DirContents[name]; ok {
+		if len(fs.nodes[ino].DirContents) > 0 {
+			return syscall.ENOTEMPTY // is this right?
+		}
+		fs.nodes[parent].DirContents[name] = ino, false // delete entry
+		fs.nodes[ino].Nlink -= 1  // uncount this entry
+		if fs.nodes[ino].Nlink <= 0 {
+			// Trash entry when last link is removed
+			fs.nodes[ino] = fs.nodes[ino], false
+		}
+		return fuse.OK
+	}
+	return fuse.ENOENT
 }
 
 func (_ *FileSystem) Log(v ...interface{}) {
@@ -89,6 +111,11 @@ func (fs *FileSystem) FuseLookup(h *fuse.Header, p []byte) (*fuse.Attr, fuse.Err
 		}
 	}
 	return nil, fuse.ENOENT
+}
+
+func (fs *FileSystem) FuseDelete(h *fuse.Header, name []byte) fuse.Error {
+	fs.Log("FuseDelete", h.Nodeid, name)
+	return fs.Delete(h.Nodeid, string(name))
 }
 
 func (fs *FileSystem) FuseForget(f *fuse.Forget) {

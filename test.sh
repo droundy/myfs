@@ -21,14 +21,20 @@ grep hello testing-mountpoint/bar && exit 1
 cd testing-mountpoint
 mkdir boo
 ls -l boo
-#rmdir boo
-#ls -l boo && exit 1
+echo foo > boo/foo
+rmdir boo 2> err && exit 1
+cat err
+#grep 'Directory not empty' err
+rm err
+rm boo/foo
+rmdir boo
+ls -l boo && exit 1
 echo hello > bar
 grep hello bar
 # the size is 6
 ls -l bar | grep ' 6 '
-#rm bar
-#ls -l bar && exit 1
+rm bar
+ls -l bar && exit 1
 cd ..
 
 ls -lh testing-mountpoint
