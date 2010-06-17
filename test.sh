@@ -24,7 +24,7 @@ ls -l boo
 echo foo > boo/foo
 rmdir boo 2> err && exit 1
 cat err
-#grep 'Directory not empty' err
+grep 'Directory not empty' err
 rm err
 rm boo/foo
 rmdir boo

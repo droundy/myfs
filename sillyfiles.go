@@ -140,16 +140,54 @@ func (fs *FileSystem) FuseMkDir(m *fuse.MkDir, p []byte) (*fuse.Attr, fuse.Error
 
 func (fs *FileSystem) FuseCreate(c *fuse.Create, p []byte) (flags fuse.Flags, fh fuse.FuseFile, a *fuse.Attr, e fuse.Error) {
 	fs.Log("FuseCreate", c)
+	if c.Flags & os.O_WRONLY != 0 {
+		fs.Log("O_WRONLY");
+	} else if c.Flags & os.O_RDONLY != 0 {
+		fs.Log("O_RDONLY");
+	}	else if c.Flags & os.O_RDWR != 0 {
+		fs.Log("O_RDWR");
+	}
+	if c.Flags & os.O_NONBLOCK != 0 {
+		fs.Log("O_NONBLOCK");
+	}
+	if c.Flags & os.O_EXCL != 0 {
+		fs.Log("O_EXCL");
+	}
+	// O_CREAT is always present in FuseCreate...
 	inew := fs.Create(c.Nodeid, string(p))
+	inew.HandleFlags(c.Flags) // Handle O_TRUNC
 	inew.Uid, inew.Gid = uint32(c.Uid), uint32(c.Gid);
-	return c.Flags, inew, inew.ToAttr(), fuse.OK
+	return c.Flags, &OpenInode{inew,0}, inew.ToAttr(), fuse.OK
 }
 
 func (fs *FileSystem) FuseOpen(o *fuse.Open) (flags fuse.Flags, fh fuse.FuseFile, e fuse.Error) {
 	fs.Log("FuseOpen", o)
 	flags =  o.Flags
+	fs.Log("open flags are", o.Flags)
+	if o.Flags & os.O_WRONLY != 0 {
+		fs.Log("O_WRONLY");
+	} else if o.Flags & os.O_RDONLY != 0 {
+		fs.Log("O_RDONLY");
+	}	else if o.Flags & os.O_RDWR != 0 {
+		fs.Log("O_RDWR");
+	}
+	if o.Flags & os.O_NONBLOCK != 0 {
+		fs.Log("O_NONBLOCK");
+	}
+	if o.Flags & os.O_EXCL != 0 {
+		fs.Log("O_EXCL");
+	}
+	// O_CREAT isn't a possibility in FuseOpen...
 	if i,ok := fs.nodes[o.Nodeid]; ok {
-		return flags, i, fuse.OK
+		i.HandleFlags(o.Flags) // handle O_TRUNC
+		if o.Flags & os.O_APPEND != 0 {
+			fs.Log("O_APPEND");
+			i.HandleFlags(o.Flags) // handle O_TRUNC
+			fh := &OpenInode { i, -1 }
+			return flags, fh, fuse.OK
+		} else {
+			return flags, &OpenInode { i, 0 }, fuse.OK
+		}
 	}
 	return 0, nil, fuse.ENOENT
 }
@@ -182,7 +220,7 @@ func (fs *FileSystem) FuseAccess(a *fuse.Access) fuse.Error {
 func (fs *FileSystem) NilFile() fuse.FuseFile {
 	fs.Log("NilFile")
 	var i Inode
-	return &i
+	return &OpenInode{&i,0}
 }
 
 type Inode struct {
@@ -197,22 +235,39 @@ type Inode struct {
 	DirContents map[string]uint64
 }
 
+type OpenInode struct {
+	Ino *Inode
+	Location int
+}
+
 func (i *Inode) Log(v ...interface{}) {
 	fmt.Println("inode", i.Ino, ":", v)
+}
+
+func (i *OpenInode) Log(v ...interface{}) {
+	fmt.Println("inode", i.Ino.Ino, ":", v)
 }
 
 func (i *Inode) IsDir() bool {
 	return (i.Mode & (fuse.S_IFDIR | fuse.S_IFREG)) == fuse.S_IFDIR
 }
 
-func (i *Inode) FuseRead(io *fuse.Io) ([]byte, fuse.Error) {
+func (i *Inode) HandleFlags(f fuse.Flags) {
+	// Here we do things like O_TRUNC
+	if f & os.O_TRUNC != 0 {
+		i.Log("O_TRUNC");
+		i.FileContents = i.FileContents[0:0] // truncate file!
+	}
+}
+
+func (i *OpenInode) FuseRead(io *fuse.Io) ([]byte, fuse.Error) {
 	i.Log("FuseRead", io) // the following is wrong...
 	i.Log("offset is", io.Offset)
 	i.Log("size is", io.Size)
-	if i.IsDir() {
+	if i.Ino.IsDir() {
 		de := new(fuse.DEntryList)
 		var num uint64 = 0
-		for path,ino := range i.DirContents {
+		for path,ino := range i.Ino.DirContents {
 			i.Log("::: ",path,ino)
 			if num >= io.Offset {
 				de.AddString(path, ino, fuse.S_IFDIR)
@@ -221,41 +276,50 @@ func (i *Inode) FuseRead(io *fuse.Io) ([]byte, fuse.Error) {
 		}
 		return de.Bytes(), fuse.OK
 	}
-	return i.FileContents[io.Offset:], fuse.OK
+	return i.Ino.FileContents[i.Location:], fuse.OK
 }
 
-func (ino *Inode) FuseWrite(io *fuse.Io, d []byte) (uint64, fuse.Error) {
-	ino.Log("FuseWrite", io, string(d))
-	ino.Log("io.Offset is ", int(io.Offset))
-	stop := int(io.Offset) + len(d)
-	if cap(ino.FileContents) < stop {
-		ino.Log("Expanding FileContents...")
+func (oi *OpenInode) FuseWrite(io *fuse.Io, d []byte) (uint64, fuse.Error) {
+	oi.Log("FuseWrite", io, string(d))
+	oi.Log("io.Offset as int is ", int(io.Offset))
+	oi.Log("io.Offset is ", io.Offset)
+	oi.Log("io itself is ", io)
+	start := oi.Location + int(io.Offset)
+	if oi.Location < 0 {
+		start = len(oi.Ino.FileContents)
+	}
+	stop := start + len(d)
+	if cap(oi.Ino.FileContents) < stop {
+		oi.Log("Expanding FileContents...")
 		fc := make([]byte, stop, 2*stop)
-		for i,v := range ino.FileContents {
+		for i,v := range oi.Ino.FileContents {
 			fc[i] = v
 		}
-		ino.FileContents = fc
+		oi.Ino.FileContents = fc
 	} else {
-		ino.FileContents = ino.FileContents[0:stop]
+		oi.Ino.FileContents = oi.Ino.FileContents[0:stop]
 	}
 	for i,v := range d {
-		ino.FileContents[int(io.Offset) + i] = v
+		oi.Ino.FileContents[start + i] = v
 	}
-	ino.Log("FileContents is now: ", string(ino.FileContents))
+	oi.Log("FileContents is now: ", string(oi.Ino.FileContents))
+	if oi.Location >= 0 {
+		oi.Location += len(d)
+	}
 	return uint64(len(d)), fuse.OK
 }
 
-func (i *Inode) FuseRelease(r *fuse.Release) fuse.Error {
+func (i *OpenInode) FuseRelease(r *fuse.Release) fuse.Error {
 	i.Log("FuseRelease", r)
-	if i.Nreading > 0 { i.Nreading -= 1 }
-	if i.Nwriting > 0 { i.Nwriting -= 1 }
-	if !i.IsDir() {
-		i.Log("File contents:", string(i.FileContents))
+	if i.Ino.Nreading > 0 { i.Ino.Nreading -= 1 }
+	if i.Ino.Nwriting > 0 { i.Ino.Nwriting -= 1 }
+	if !i.Ino.IsDir() {
+		i.Log("File contents:", string(i.Ino.FileContents))
 	}
 	return fuse.OK
 }
 
-func (i *Inode) FuseFlush(f *fuse.Flush) fuse.Error {
+func (i *OpenInode) FuseFlush(f *fuse.Flush) fuse.Error {
 	i.Log("FuseFlush", f)
 	return fuse.OK
 }
