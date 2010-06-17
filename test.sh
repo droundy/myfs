@@ -36,6 +36,18 @@ grep hello bar
 ls -l bar | grep ' 6 '
 rm bar
 ls -l bar && exit 1
+
+# Check that mv works on files:
+date > foo
+cp foo bar
+diff foo bar
+# test currently fails!  :(
+#mv bar baz
+#diff foo baz
+
+rm -rf bar
+mkdir bar
+
 cd ..
 
 ls -lh testing-mountpoint
