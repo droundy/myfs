@@ -155,6 +155,7 @@ func (fs *FileSystem) FuseCreate(c *fuse.Create, p []byte) (flags fuse.Flags, fh
 	}
 	// O_CREAT is always present in FuseCreate...
 	inew := fs.Create(c.Nodeid, string(p))
+	inew.Mode = fuse.S_IFREG | c.Mode
 	inew.HandleFlags(c.Flags) // Handle O_TRUNC
 	inew.Uid, inew.Gid = uint32(c.Uid), uint32(c.Gid);
 	return c.Flags, &OpenInode{inew,0}, inew.ToAttr(), fuse.OK

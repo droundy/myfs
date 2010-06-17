@@ -48,6 +48,13 @@ diff foo bar
 rm -rf bar
 mkdir bar
 
+# Run the entire test suite!
+# FIXME: the following ought to work with cp -av, but fails!
+cp -rv ../test .
+cd test
+make check
+cd ..
+
 cd ..
 
 ls -lh testing-mountpoint
