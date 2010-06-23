@@ -68,6 +68,7 @@ func (fs *FileSystem) Create(parent uint64, name string) *Inode {
 	a.FileContents = make([]byte, 0, 256)
 	fs.nodes[a.Ino] = a;
 	fs.nodes[parent].DirContents[name] = a.Ino
+	fs.Log("Parent", parent, "contains", fs.nodes[parent].DirContents)
 	return a
 }
 
@@ -298,7 +299,9 @@ func (oi *OpenInode) FuseWrite(io *fuse.Io, d []byte) (uint64, fuse.Error) {
 		}
 		oi.Ino.FileContents = fc
 	} else {
-		oi.Ino.FileContents = oi.Ino.FileContents[0:stop]
+		if len(oi.Ino.FileContents) < stop {
+			oi.Ino.FileContents = oi.Ino.FileContents[0:stop]
+		}
 	}
 	for i,v := range d {
 		oi.Ino.FileContents[start + i] = v

@@ -16,14 +16,23 @@ simpletest.$(O): simpletest.go
 simpletest: simpletest.$(O)
 	$(LD) -o $@ $<
 runsimpletest: simpletest
-	echo the following bit is buggy?
+	echo FIXME the following bit is buggy?
 	#./simpletest
 
+ctest: ctest.c
+	cat ctest.c
+	gcc -o ctest ctest.c
+runctest: ctest
+	echo FIXME: the following is not executable?
+	#./ctest
+
 runshellscript: shellscript.sh
-	./shellscript.sh
+	sh shellscript.sh
+	echo FIXME: The following doesnt work?
+	#./shellscript.sh
 
 aminmount:
 	echo `pwd` | grep testing-mount
 
-check: aminmount runshellscript runsimpletest
+check: aminmount runshellscript runctest runsimpletest
 	echo all tests pass!
